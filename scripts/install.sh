@@ -38,7 +38,8 @@ else
     echo "==> Fetching latest release..."
     TAG=$(curl -fsSL "https://api.github.com/repos/${GITHUB_REPO}/releases/latest" | grep '"tag_name"' | head -1 | cut -d'"' -f4)
     if [ -z "$TAG" ]; then
-        echo "Error: Could not determine latest release from ${GITHUB_REPO}"
+        echo "Error: No releases found at https://github.com/${GITHUB_REPO}/releases"
+        echo "Create one first: make release (from your dev machine)"
         exit 1
     fi
     VERSION="${TAG#v}"
