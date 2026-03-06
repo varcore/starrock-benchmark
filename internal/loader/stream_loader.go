@@ -24,8 +24,6 @@ type StreamLoader struct {
 
 func NewStreamLoader(cfg config.StarRocksConfig, isUpdate bool, partialUpdateMode string, maxConns int) *StreamLoader {
 	user, pass := cfg.User, cfg.Password
-	feHost := cfg.Host
-	feHTTPPort := cfg.HTTPPort
 
 	transport := &http.Transport{
 		MaxConnsPerHost:     maxConns,
@@ -41,14 +39,6 @@ func NewStreamLoader(cfg config.StarRocksConfig, isUpdate bool, partialUpdateMod
 				return fmt.Errorf("stopped after 10 redirects")
 			}
 			req.SetBasicAuth(user, pass)
-
-			if !strings.HasPrefix(req.URL.Host, feHost) {
-				port := req.URL.Port()
-				if port == "" {
-					port = fmt.Sprintf("%d", feHTTPPort)
-				}
-				req.URL.Host = fmt.Sprintf("%s:%s", feHost, port)
-			}
 			return nil
 		},
 	}
