@@ -1,10 +1,13 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
 	"runtime"
+	"syscall"
 
 	"starrock-benchmark/internal/config"
 	"starrock-benchmark/internal/runner"
@@ -41,8 +44,23 @@ func main() {
 
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		sig := <-sigCh
+		fmt.Fprintf(os.Stderr, "\nReceived %v, shutting down gracefully... (press Ctrl+C again to force exit)\n", sig)
+		cancel()
+
+		<-sigCh
+		fmt.Fprintf(os.Stderr, "\nForced exit.\n")
+		os.Exit(1)
+	}()
+
 	r := runner.New(cfg)
-	if err := r.Run(); err != nil {
+	if err := r.Run(ctx); err != nil {
 		fmt.Fprintf(os.Stderr, "\nBenchmark failed: %v\n", err)
 		os.Exit(1)
 	}

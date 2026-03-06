@@ -4,11 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"os"
-	"os/signal"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -34,7 +31,7 @@ func New(cfg *config.Config) *Runner {
 	return &Runner{cfg: cfg}
 }
 
-func (r *Runner) Run() error {
+func (r *Runner) Run(ctx context.Context) error {
 	adminDB, err := sql.Open("mysql", r.cfg.StarRocks.MySQLDSN(""))
 	if err != nil {
 		return fmt.Errorf("connecting to StarRocks: %w", err)
@@ -47,9 +44,6 @@ func (r *Runner) Run() error {
 	fmt.Println("Connected to StarRocks successfully.")
 
 	r.schemaMgr = schema.NewManager(r.cfg, adminDB)
-
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
 	defer r.cleanup()
 
@@ -74,19 +68,19 @@ func (r *Runner) Run() error {
 	fmt.Println("Preflight check passed.")
 
 	if r.cfg.Benchmark.Scenario == "update" {
-		if err := r.runSeedPhase(sigCh); err != nil {
+		if err := r.runSeedPhase(ctx); err != nil {
 			return fmt.Errorf("seed phase: %w", err)
 		}
 	}
 
-	if err := r.runBenchmark(sigCh); err != nil {
+	if err := r.runBenchmark(ctx); err != nil {
 		return fmt.Errorf("benchmark: %w", err)
 	}
 
 	return nil
 }
 
-func (r *Runner) runSeedPhase(sigCh chan os.Signal) error {
+func (r *Runner) runSeedPhase(ctx context.Context) error {
 	fmt.Printf("\n=== Seeding Phase: inserting %d rows per database ===\n", r.cfg.Benchmark.SeedRecords)
 
 	collector := metrics.NewCollector(10000)
@@ -95,22 +89,13 @@ func (r *Runner) runSeedPhase(sigCh chan os.Signal) error {
 	collector.Start()
 	display.Start()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	seedCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-
-	go func() {
-		select {
-		case <-sigCh:
-			fmt.Println("\nReceived signal, stopping seed phase...")
-			cancel()
-		case <-ctx.Done():
-		}
-	}()
 
 	var seedCounter atomic.Int64
 	totalSeedTarget := r.cfg.Benchmark.SeedRecords * int64(r.cfg.Benchmark.Databases)
 
-	err := r.runWorkers(ctx, cancel, collector, &seedCounter, totalSeedTarget, false)
+	err := r.runWorkers(seedCtx, cancel, collector, &seedCounter, totalSeedTarget, false)
 
 	display.Stop()
 	collector.Stop()
@@ -123,13 +108,17 @@ func (r *Runner) runSeedPhase(sigCh chan os.Signal) error {
 	return nil
 }
 
-func (r *Runner) runBenchmark(sigCh chan os.Signal) error {
+func (r *Runner) runBenchmark(ctx context.Context) error {
 	b := &r.cfg.Benchmark
 	fmt.Printf("\n=== Benchmark Phase: scenario=%s, method=%s ===\n", b.Scenario, b.LoadMethod)
 
 	if b.ParsedWarmupDuration > 0 {
 		fmt.Printf("Warming up for %s...\n", b.ParsedWarmupDuration)
-		time.Sleep(b.ParsedWarmupDuration)
+		select {
+		case <-time.After(b.ParsedWarmupDuration):
+		case <-ctx.Done():
+			return nil
+		}
 	}
 
 	r.collector = metrics.NewCollector(10000)
@@ -138,25 +127,16 @@ func (r *Runner) runBenchmark(sigCh chan os.Signal) error {
 	r.collector.Start()
 	r.display.Start()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	benchCtx, cancel := context.WithCancel(ctx)
 	if b.ParsedDuration > 0 {
-		ctx, cancel = context.WithTimeout(context.Background(), b.ParsedDuration)
+		benchCtx, cancel = context.WithTimeout(ctx, b.ParsedDuration)
 	}
 	defer cancel()
-
-	go func() {
-		select {
-		case <-sigCh:
-			fmt.Println("\nReceived signal, stopping benchmark...")
-			cancel()
-		case <-ctx.Done():
-		}
-	}()
 
 	r.recordCounter.Store(0)
 	isUpdate := b.Scenario == "update"
 
-	err := r.runWorkers(ctx, cancel, r.collector, &r.recordCounter, b.TotalRecords, isUpdate)
+	err := r.runWorkers(benchCtx, cancel, r.collector, &r.recordCounter, b.TotalRecords, isUpdate)
 
 	r.display.Stop()
 	r.collector.Stop()
