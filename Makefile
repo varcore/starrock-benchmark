@@ -13,7 +13,7 @@ DEB_DIR     := dist
 GOOS        ?= $(shell $(GO) env GOOS)
 GOARCH      ?= $(shell $(GO) env GOARCH)
 
-.PHONY: all build build-linux build-all test vet clean package-deb install uninstall version
+.PHONY: all build build-linux build-all test vet clean package-deb install uninstall version release
 
 all: build
 
@@ -72,6 +72,20 @@ uninstall:
 	@echo "Removing $(APP_NAME)..."
 	sudo rm -f /usr/local/bin/$(APP_NAME)
 	@echo "Removed."
+
+# Full release: build, package, and upload to GitHub
+release:
+	@bash scripts/release.sh
+
+# Release with version bump: make release-patch / release-minor / release-major
+release-patch:
+	@bash scripts/release.sh --bump patch
+
+release-minor:
+	@bash scripts/release.sh --bump minor
+
+release-major:
+	@bash scripts/release.sh --bump major
 
 # Clean build artifacts
 clean:

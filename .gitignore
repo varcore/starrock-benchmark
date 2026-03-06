@@ -17,3 +17,6 @@ Thumbs.db
 # Config with secrets (keep example)
 config.yaml
 !config.yaml.example
+
+# Daily work
+daily-work.md
