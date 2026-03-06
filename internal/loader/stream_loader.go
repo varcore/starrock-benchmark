@@ -22,22 +22,26 @@ type StreamLoader struct {
 	partialUpdateMode string
 }
 
-func NewStreamLoader(cfg config.StarRocksConfig, isUpdate bool, partialUpdateMode string) *StreamLoader {
+func NewStreamLoader(cfg config.StarRocksConfig, isUpdate bool, partialUpdateMode string, maxConns int) *StreamLoader {
 	user, pass := cfg.User, cfg.Password
 	feHost := cfg.Host
 	feHTTPPort := cfg.HTTPPort
 
+	transport := &http.Transport{
+		MaxConnsPerHost:     maxConns,
+		MaxIdleConnsPerHost: maxConns,
+		MaxIdleConns:        maxConns,
+	}
+
 	client := &http.Client{
-		Timeout: 5 * time.Minute,
+		Transport: transport,
+		Timeout:   5 * time.Minute,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if len(via) >= 10 {
 				return fmt.Errorf("stopped after 10 redirects")
 			}
-			// Go strips Authorization on redirect by default -- re-apply it.
 			req.SetBasicAuth(user, pass)
 
-			// If the redirect target is an internal hostname (different from FE host),
-			// rewrite it to the external FE IP but keep the BE port.
 			if !strings.HasPrefix(req.URL.Host, feHost) {
 				port := req.URL.Port()
 				if port == "" {

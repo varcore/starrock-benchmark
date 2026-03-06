@@ -30,6 +30,12 @@ benchmark:
   # Workers are distributed evenly across tables within the database.
   parallel_per_db: 10
 
+  # Total number of database connections shared across all databases.
+  # Connections are split evenly per DB: each DB gets max(1, max_connections / databases).
+  # Workers within a DB share these connections; e.g. 10 workers with 5 connections
+  # means workers queue for an available connection.
+  max_connections: 20
+
   # Rows per batch INSERT / Stream Load request
   batch_size: 25000
 

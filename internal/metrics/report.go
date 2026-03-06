@@ -11,15 +11,17 @@ import (
 )
 
 type ReportConfig struct {
-	Scenario         string
-	LoadMethod       string
-	Databases        int
-	TablesPerDB      int
-	TableEngine string
-	BatchSize   int
-	Parallel    int
-	Duration    string
-	Records     int64
+	Scenario       string
+	LoadMethod     string
+	Databases      int
+	TablesPerDB    int
+	TableEngine    string
+	BatchSize      int
+	Parallel       int
+	MaxConnections int
+	ConnsPerDB     int
+	Duration       string
+	Records        int64
 }
 
 type ReportResult struct {
@@ -156,6 +158,8 @@ func printReport(r ReportResult) {
 		{"Table Engine", r.Config.TableEngine},
 		{"Batch Size", r.Config.BatchSize},
 		{"Parallel/DB", r.Config.Parallel},
+		{"Max Connections", r.Config.MaxConnections},
+		{"Connections/DB", r.Config.ConnsPerDB},
 		{"Duration/Records", fmt.Sprintf("%s / %d", r.Config.Duration, r.Config.Records)},
 	})
 	cfgTable.Render()

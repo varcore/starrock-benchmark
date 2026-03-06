@@ -46,6 +46,7 @@ type BenchmarkConfig struct {
 	TableEngine    string        `yaml:"table_engine"`
 	PrimaryKeyType string        `yaml:"primary_key_type"`
 	ParallelPerDB  int           `yaml:"parallel_per_db"`
+	MaxConnections int           `yaml:"max_connections"`
 	BatchSize      int           `yaml:"batch_size"`
 	BucketCount    int           `yaml:"bucket_count"`
 	Duration       string        `yaml:"duration"`
@@ -61,6 +62,7 @@ type BenchmarkConfig struct {
 
 	ParsedDuration       time.Duration `yaml:"-"`
 	ParsedWarmupDuration time.Duration `yaml:"-"`
+	ConnsPerDB           int           `yaml:"-"`
 }
 
 type Config struct {
@@ -141,6 +143,17 @@ func (c *Config) validate() error {
 	if b.ParallelPerDB < 1 {
 		b.ParallelPerDB = 4
 	}
+
+	if b.MaxConnections < 1 {
+		return fmt.Errorf("max_connections must be >= 1")
+	}
+	b.ConnsPerDB = b.MaxConnections / b.Databases
+	if b.ConnsPerDB < 1 {
+		fmt.Printf("Warning: max_connections (%d) < databases (%d); using 1 connection per database\n",
+			b.MaxConnections, b.Databases)
+		b.ConnsPerDB = 1
+	}
+
 	if b.BatchSize < 1 {
 		b.BatchSize = 1000
 	}

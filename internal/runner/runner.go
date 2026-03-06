@@ -142,15 +142,17 @@ func (r *Runner) runBenchmark(ctx context.Context) error {
 	r.collector.Stop()
 
 	reportCfg := metrics.ReportConfig{
-		Scenario:    b.Scenario,
-		LoadMethod:  b.LoadMethod,
-		Databases:   b.Databases,
-		TablesPerDB: b.TablesPerDB,
-		TableEngine: b.TableEngine,
-		BatchSize:   b.BatchSize,
-		Parallel:    b.ParallelPerDB,
-		Duration:    b.Duration,
-		Records:     b.TotalRecords,
+		Scenario:       b.Scenario,
+		LoadMethod:     b.LoadMethod,
+		Databases:      b.Databases,
+		TablesPerDB:    b.TablesPerDB,
+		TableEngine:    b.TableEngine,
+		BatchSize:      b.BatchSize,
+		Parallel:       b.ParallelPerDB,
+		MaxConnections: b.MaxConnections,
+		ConnsPerDB:     b.ConnsPerDB,
+		Duration:       b.Duration,
+		Records:        b.TotalRecords,
 	}
 	metrics.GenerateReport(r.collector, reportCfg, b.ResultsFile)
 
@@ -180,6 +182,8 @@ func (r *Runner) runWorkers(
 
 	fmt.Printf("  Concurrency: %d parallel requests/DB x %d DBs = %d total goroutines\n",
 		b.ParallelPerDB, b.Databases, totalWorkers)
+	fmt.Printf("  Connections: %d total, %d per DB (shared by %d workers/DB)\n",
+		b.MaxConnections, b.ConnsPerDB, b.ParallelPerDB)
 	fmt.Printf("  Per-table distribution: %v workers across %d tables (batch_size=%d)\n",
 		workersPerTable, b.TablesPerDB, b.BatchSize)
 	fmt.Printf("  Rows in-flight per DB: %d x %d = %d\n",
@@ -196,12 +200,12 @@ func (r *Runner) runWorkers(
 		var loaderErr error
 
 		if b.LoadMethod == "sql" {
-			dbLoader, loaderErr = loader.NewSQLLoader(r.cfg.StarRocks, dbName, b.ParallelPerDB)
+			dbLoader, loaderErr = loader.NewSQLLoader(r.cfg.StarRocks, dbName, b.ConnsPerDB)
 			if loaderErr != nil {
 				return fmt.Errorf("creating SQL loader for %s: %w", dbName, loaderErr)
 			}
 		} else {
-			dbLoader = loader.NewStreamLoader(r.cfg.StarRocks, isUpdate, b.PartialUpdateMode)
+			dbLoader = loader.NewStreamLoader(r.cfg.StarRocks, isUpdate, b.PartialUpdateMode, b.ConnsPerDB)
 		}
 
 		dbG, _ := errgroup.WithContext(gCtx)
@@ -364,7 +368,7 @@ func (r *Runner) preflightCheck() error {
 		defer sqlLdr.Close()
 		ldr = sqlLdr
 	} else {
-		streamLdr := loader.NewStreamLoader(r.cfg.StarRocks, false, "")
+		streamLdr := loader.NewStreamLoader(r.cfg.StarRocks, false, "", 1)
 		defer streamLdr.Close()
 		ldr = streamLdr
 	}
