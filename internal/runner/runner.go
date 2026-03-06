@@ -49,13 +49,13 @@ func (r *Runner) Run(ctx context.Context) error {
 
 	if r.cfg.Benchmark.UseExisting {
 		fmt.Println("\n=== Schema: Checking existing databases/tables ===")
-		if err := r.schemaMgr.EnsureAll(); err != nil {
+		if err := r.schemaMgr.EnsureAll(ctx); err != nil {
 			return fmt.Errorf("ensuring schema: %w", err)
 		}
 		fmt.Println("Schema check complete.")
 	} else {
 		fmt.Println("\n=== Creating Schema ===")
-		if err := r.schemaMgr.CreateAll(); err != nil {
+		if err := r.schemaMgr.CreateAll(ctx); err != nil {
 			return fmt.Errorf("creating schema: %w", err)
 		}
 		fmt.Println("Schema created successfully.")

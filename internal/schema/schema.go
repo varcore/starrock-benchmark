@@ -1,6 +1,7 @@
 package schema
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"strings"
@@ -18,19 +19,25 @@ func NewManager(cfg *config.Config, db *sql.DB) *Manager {
 	return &Manager{cfg: cfg, db: db}
 }
 
-func (m *Manager) CreateAll() error {
+func (m *Manager) CreateAll(ctx context.Context) error {
 	for i := 0; i < m.cfg.Benchmark.Databases; i++ {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		dbName := m.cfg.DatabaseName(i)
 		fmt.Printf("Creating database: %s\n", dbName)
-		if _, err := m.db.Exec(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS `%s`", dbName)); err != nil {
+		if _, err := m.db.ExecContext(ctx, fmt.Sprintf("CREATE DATABASE IF NOT EXISTS `%s`", dbName)); err != nil {
 			return fmt.Errorf("creating database %s: %w", dbName, err)
 		}
 
 		for j := 0; j < m.cfg.Benchmark.TablesPerDB; j++ {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
 			tableName := m.cfg.TableName(j)
 			ddl := m.buildCreateTableDDL(dbName, tableName)
 			fmt.Printf("Creating table: %s.%s\n", dbName, tableName)
-			if _, err := m.db.Exec(ddl); err != nil {
+			if _, err := m.db.ExecContext(ctx, ddl); err != nil {
 				return fmt.Errorf("creating table %s.%s: %w", dbName, tableName, err)
 			}
 		}
@@ -38,20 +45,23 @@ func (m *Manager) CreateAll() error {
 	return nil
 }
 
-func (m *Manager) EnsureAll() error {
+func (m *Manager) EnsureAll(ctx context.Context) error {
 	expectedCols := m.expectedColumnNames()
 
 	for i := 0; i < m.cfg.Benchmark.Databases; i++ {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		dbName := m.cfg.DatabaseName(i)
 
-		dbExists, err := m.databaseExists(dbName)
+		dbExists, err := m.databaseExists(ctx, dbName)
 		if err != nil {
 			return fmt.Errorf("checking database %s: %w", dbName, err)
 		}
 
 		if !dbExists {
 			fmt.Printf("Database %s does not exist, creating...\n", dbName)
-			if _, err := m.db.Exec(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS `%s`", dbName)); err != nil {
+			if _, err := m.db.ExecContext(ctx, fmt.Sprintf("CREATE DATABASE IF NOT EXISTS `%s`", dbName)); err != nil {
 				return fmt.Errorf("creating database %s: %w", dbName, err)
 			}
 		} else {
@@ -59,9 +69,12 @@ func (m *Manager) EnsureAll() error {
 		}
 
 		for j := 0; j < m.cfg.Benchmark.TablesPerDB; j++ {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
 			tableName := m.cfg.TableName(j)
 
-			tblExists, err := m.tableExists(dbName, tableName)
+			tblExists, err := m.tableExists(ctx, dbName, tableName)
 			if err != nil {
 				return fmt.Errorf("checking table %s.%s: %w", dbName, tableName, err)
 			}
@@ -69,13 +82,13 @@ func (m *Manager) EnsureAll() error {
 			if !tblExists {
 				fmt.Printf("Table %s.%s does not exist, creating...\n", dbName, tableName)
 				ddl := m.buildCreateTableDDL(dbName, tableName)
-				if _, err := m.db.Exec(ddl); err != nil {
+				if _, err := m.db.ExecContext(ctx, ddl); err != nil {
 					return fmt.Errorf("creating table %s.%s: %w", dbName, tableName, err)
 				}
 				continue
 			}
 
-			actualCols, err := m.getTableColumns(dbName, tableName)
+			actualCols, err := m.getTableColumns(ctx, dbName, tableName)
 			if err != nil {
 				return fmt.Errorf("reading columns for %s.%s: %w", dbName, tableName, err)
 			}
@@ -90,9 +103,9 @@ func (m *Manager) EnsureAll() error {
 	return nil
 }
 
-func (m *Manager) databaseExists(dbName string) (bool, error) {
+func (m *Manager) databaseExists(ctx context.Context, dbName string) (bool, error) {
 	var count int
-	err := m.db.QueryRow(
+	err := m.db.QueryRowContext(ctx,
 		"SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name = ?", dbName,
 	).Scan(&count)
 	if err != nil {
@@ -101,9 +114,9 @@ func (m *Manager) databaseExists(dbName string) (bool, error) {
 	return count > 0, nil
 }
 
-func (m *Manager) tableExists(dbName, tableName string) (bool, error) {
+func (m *Manager) tableExists(ctx context.Context, dbName, tableName string) (bool, error) {
 	var count int
-	err := m.db.QueryRow(
+	err := m.db.QueryRowContext(ctx,
 		"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = ? AND table_name = ?",
 		dbName, tableName,
 	).Scan(&count)
@@ -118,8 +131,8 @@ type columnInfo struct {
 	DataType string
 }
 
-func (m *Manager) getTableColumns(dbName, tableName string) ([]columnInfo, error) {
-	rows, err := m.db.Query(
+func (m *Manager) getTableColumns(ctx context.Context, dbName, tableName string) ([]columnInfo, error) {
+	rows, err := m.db.QueryContext(ctx,
 		"SELECT column_name, column_type FROM information_schema.columns WHERE table_schema = ? AND table_name = ? ORDER BY ordinal_position",
 		dbName, tableName,
 	)
