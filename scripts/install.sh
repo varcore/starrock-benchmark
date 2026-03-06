@@ -11,20 +11,7 @@ set -euo pipefail
 #
 
 APP_NAME="starrock-benchmark"
-GITHUB_REPO="${STARROCK_BENCH_REPO:-}"
-
-# Auto-detect repo from script URL if not set
-if [ -z "$GITHUB_REPO" ]; then
-    echo "Error: GITHUB_REPO not set."
-    echo ""
-    echo "Set it before running:"
-    echo "  export STARROCK_BENCH_REPO=your-org/your-repo"
-    echo "  curl -fsSL https://raw.githubusercontent.com/\$STARROCK_BENCH_REPO/main/scripts/install.sh | sudo bash"
-    echo ""
-    echo "Or edit this script and hardcode GITHUB_REPO at the top."
-    exit 1
-fi
-
+GITHUB_REPO="varcore/starrock-benchmark"
 REQUESTED_VERSION=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
