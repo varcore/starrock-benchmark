@@ -1,0 +1,90 @@
+starrocks:
+  host: "YOUR_STARROCKS_HOST"
+  mysql_port: 9030
+  http_port: 8030
+  user: "root"
+  password: "YOUR_PASSWORD"
+
+benchmark:
+  # Scenario: "ingestion" (INSERT new rows) or "update" (UPDATE existing rows)
+  scenario: "ingestion"
+
+  # Load method: "sql" (MySQL protocol INSERT) or "stream_load" (HTTP Stream Load)
+  load_method: "sql"
+
+  # Number of databases to create (benchmark_1, benchmark_2, ...)
+  databases: 2
+
+  # Number of tables per database (bench_table_1, bench_table_2, ...)
+  tables_per_db: 2
+
+  # StarRocks table engine: PRIMARY_KEY, DUPLICATE_KEY, UNIQUE_KEY, AGGREGATE_KEY
+  table_engine: "DUPLICATE_KEY"
+
+  # Primary key composition: "id" (BIGINT only) or "id_created_at" (BIGINT + DATETIME)
+  primary_key_type: "id"
+
+  # Number of parallel batch requests per database.
+  # Each = 1 goroutine sending batch_size rows concurrently.
+  # Example: parallel_per_db=10, batch_size=5000 -> 10 batches of 5K = 50K rows in-flight at once per DB.
+  # Workers are distributed evenly across tables within the database.
+  parallel_per_db: 10
+
+  # Rows per batch INSERT / Stream Load request
+  batch_size: 25000
+
+  # Number of hash distribution buckets for tables
+  bucket_count: 10
+
+  # Stop condition: specify ONE of duration or total_records
+  duration: "30s"
+  # total_records: 1000000
+
+  # Column schema configuration
+  columns:
+    # Auto-generate columns with mixed types (INT, BIGINT, VARCHAR(256), DOUBLE, DATETIME)
+    auto: true
+    count: 5
+
+    # OR specify explicit column definitions:
+    # auto: false
+    # definitions:
+    #   - name: "user_name"
+    #     type: "VARCHAR(256)"
+    #   - name: "score"
+    #     type: "DOUBLE"
+    #   - name: "age"
+    #     type: "INT"
+    #   - name: "balance"
+    #     type: "BIGINT"
+    #   - name: "last_login"
+    #     type: "DATETIME"
+
+  # Warmup period before collecting metrics (lets connection pools stabilize)
+  warmup_duration: "10s"
+
+  # Number of rows to pre-load per database before running update benchmark
+  # Only used when scenario is "update"
+  seed_records: 100000
+
+  # Partial update mode for update scenario (only used with stream_load + update):
+  #   "row"    - updates entire row; best when updating most/all columns
+  #   "column" - updates only specified columns; best when updating few columns out of many
+  #   Leave empty for auto-select: "column" if >10 total columns, "row" otherwise
+  partial_update_mode: "column"
+
+  # Max retries for transient failures (with exponential backoff)
+  max_retries: 3
+
+  # Whether to reuse existing benchmark databases/tables if they already exist
+  # true = check if benchmark_X DBs and bench_table_N tables exist; reuse if columns match, create only what's missing
+  # false = always create fresh databases and tables (default)
+  use_existing: true
+
+  # Whether to delete benchmark databases after completion
+  # true = DROP all benchmark_* databases after run (default)
+  # false = keep data in StarRocks for manual inspection
+  delete_data: false
+
+  # Optional: write final results to JSON file
+  results_file: "benchmark_results.json"
